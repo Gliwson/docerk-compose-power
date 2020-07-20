@@ -1,0 +1,99 @@
+version: '3'
+
+volumes:
+  postgres_data:
+    driver: local
+
+services:
+
+  postgres:
+    container_name: power_postgres
+    image: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: password
+    networks:
+      mynet:
+
+  keycloak:
+    container_name: power_keycloak
+    image: jboss/keycloak:10.0.2
+    volumes:
+      - ./keycloakConfig:/tmp
+    environment:
+      KEYCLOAK_USER: admin
+      KEYCLOAK_PASSWORD: admin
+      KEYCLOAK_IMPORT: /tmp/gliwson-realm.json
+      DB_VENDOR: POSTGRES
+      DB_ADDR: postgres
+      DB_DATABASE: keycloak
+      DB_USER: keycloak
+      DB_PASSWORD: password
+    ports:
+      - 8080:8080
+    networks:
+      mynet:
+    depends_on:
+      - postgres
+
+  backend:
+    container_name: power_backend
+    image: gliwson/backend:latest
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://database:3306/powerStation?serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: "root"
+      SPRING_DATASOURCE_PASSWORD: "root"
+      SPRING_REDIS_HOST: redis
+      keycloak.auth-server-url: http://localhost:4200/auth
+      KEYCLOAK_PROXY-URL: http://keycloak:8080/auth
+      spring.rabbitmq.host: rabbitmq
+    ports:
+      - "8085:8085"
+    networks:
+      mynet:
+    depends_on:
+      - redis
+      - database
+      - keycloak
+      - rabbitmq
+
+  database:
+    container_name: 'power_database'
+    image: 'mysql:latest'
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_USER=root
+      - MYSQL_DATABASE=powerStation
+    networks:
+      mynet:
+
+  redis:
+    container_name: 'power_redis'
+    image: redis
+    networks:
+      mynet:
+
+  rabbitmq:
+    container_name: 'power_rabbit'
+    image: rabbitmq:3-management
+    environment:
+      - RABBITMQ_DEFAULT_USER=test
+      - RABBITMQ_DEFAULT_PASS=test
+    networks:
+      mynet:
+
+
+  frontend:
+    container_name: power_frontend
+    image: gliwson/frontend:latest
+    ports:
+      - "4200:4200"
+    networks:
+      mynet:
+
+networks:
+  mynet:
+    driver: bridge
